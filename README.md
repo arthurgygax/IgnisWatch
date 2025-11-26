@@ -35,7 +35,7 @@ The project is designed to be modular, containerized, and easily deployable.
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/IgnisWatch.git
+    git clone https://github.com/arthurgygax/IgnisWatch.git
     cd IgnisWatch
     ```
 
