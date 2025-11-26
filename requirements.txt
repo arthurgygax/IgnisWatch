@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+jinja2
+python-multipart
+pandas
+numpy
+rasterio
+shapely
+pystac-client
+odc-stac
+planetary-computer
+openmeteo-requests
+requests-cache
+retry-requests
+Pillow

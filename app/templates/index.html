@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>IgnisWatch</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        /* WIND CANVAS */
+        #wind-canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 5;
+            mix-blend-mode: screen; 
+        }
+
+        /* HUD PANEL */
+        #hud {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(10, 10, 15, 0.9); color: white;
+            padding: 20px; border-radius: 12px; width: 280px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 30px rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.1);
+            font-size: 14px; z-index: 10;
+        }
+        h1 { margin: 0 0 15px 0; font-size: 22px; color: #ff5500; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; }
+        
+        .section-title { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 5px; display: block; font-weight: bold; letter-spacing: 0.5px; }
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; }
+        
+        /* STATUS INDICATORS */
+        .status-box { margin-bottom: 15px; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 8px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+        
+        .status-idle .dot { background: #00ff00; box-shadow: 0 0 5px #00ff00; }
+        .status-idle span { color: #ccc; }
+
+        .status-waiting .dot { background: #ffcc00; animation: blink 0.5s infinite; }
+        .status-waiting span { color: #ffcc00; }
+
+        .status-scanning .dot { background: #ff5500; animation: pulse 1s infinite; }
+        .status-scanning span { color: #ff5500; }
+
+        @keyframes blink { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+        @keyframes pulse { 0% { transform: scale(0.8); opacity: 0.7; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(0.8); opacity: 0.7; } }
+
+        .zoom-warning {
+            color: #ff5500; font-weight: bold; display: none; margin-bottom: 15px; font-size: 13px;
+            background: rgba(255, 85, 0, 0.1); padding: 8px; border-radius: 6px; border: 1px solid #ff5500;
+        }
+
+        #risk-bar { height: 8px; background: #222; border-radius: 4px; margin-top: 10px; overflow: hidden; }
+        #risk-fill { height: 100%; width: 0%; background: #00ff00; transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1), background 0.6s; }
+
+        .date-container { display: flex; gap: 8px; margin-bottom: 15px; }
+        .date-input {
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+            color: white; border-radius: 6px; padding: 6px; width: 100%;
+            font-size: 12px; color-scheme: dark; cursor: pointer;
+        }
+
+        .legend-box {
+            position: absolute; bottom: 30px; right: 20px; 
+            background: rgba(255,255,255,0.95); padding: 15px; 
+            border-radius: 8px; font-size: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 10; color: #333;
+        }
+
+        .style-switcher {
+            position: absolute; bottom: 30px; left: 20px;
+            background: white; padding: 4px; border-radius: 8px;
+            display: flex; gap: 4px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 10;
+        }
+        .style-btn {
+            border: none; background: #f0f0f0; padding: 8px 12px;
+            border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold;
+            color: #444; transition: all 0.2s;
+        }
+        .style-btn.active { background: #222; color: white; }
+
+        .view-toggle {
+            display: flex; background: rgba(255,255,255,0.05); border-radius: 6px; padding: 2px;
+            margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1);
+        }
+        .toggle-opt {
+            flex: 1; text-align: center; padding: 6px; font-size: 11px; cursor: pointer;
+            border-radius: 4px; color: #aaa; text-transform: uppercase; font-weight: bold;
+            transition: all 0.2s;
+        }
+        .toggle-opt.selected { background: #ff5500; color: white; }
+
+        .wind-switch {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px; font-size: 12px; color: #ccc;
+        }
+        .switch { position: relative; display: inline-block; width: 34px; height: 18px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #444; transition: .4s; border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px;
+            background-color: white; transition: .4s; border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #ff5500; }
+        input:checked + .slider:before { transform: translateX(16px); }
+
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+<canvas id="wind-canvas"></canvas>
+
+<!-- HUD -->
+<div id="hud">
+    <h1>IgnisWatch</h1>
+    
+    <!-- IMPROVED STATUS INDICATOR -->
+    <div id="status-indicator" class="status-box status-idle">
+        <div class="dot"></div>
+        <span id="status-text">Ready</span>
+    </div>
+
+    <div id="zoom-warning" class="zoom-warning">⚠️ ZOOM IN TO SCAN</div>
+
+    <div class="view-toggle">
+        <div class="toggle-opt selected" id="view-risk" onclick="toggleView('risk')">Risk Analysis</div>
+        <div class="toggle-opt" id="view-rgb" onclick="toggleView('rgb')">Satellite View</div>
+    </div>
+
+    <div class="wind-switch">
+        <span>Wind Animation</span>
+        <label class="switch">
+            <!-- DEFAULT OFF (Removed 'checked') -->
+            <input type="checkbox" id="wind-toggle"> 
+            <span class="slider"></span>
+        </label>
+    </div>
+
+    <div style="border-bottom: 1px solid rgba(255,255,255,0.15); margin-bottom: 15px;">
+        <label class="section-title">Period</label>
+        <div class="date-container">
+            <input type="date" id="date-start" class="date-input">
+            <input type="date" id="date-end" class="date-input">
+        </div>
+    </div>
+
+    <div id="stats">
+        <label class="section-title">Live Weather</label>
+        <div class="stat-row"><span>Temp:</span> <span id="temp">--</span></div>
+        <div class="stat-row"><span>Wind Avg:</span> <span id="wind">--</span></div>
+        <div class="stat-row"><span>Humidity:</span> <span id="humidity">--</span></div>
+        <div class="stat-row"><span>Vegetation:</span> <span id="ndvi">--</span></div>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <label class="section-title" style="margin-bottom: 5px;">Fire Risk</label>
+        <div style="font-weight: bold; font-size: 24px;"><span id="risk-val">0</span>%</div>
+        <div id="risk-bar"><div id="risk-fill"></div></div>
+    </div>
+</div>
+
+<!-- LEGEND -->
+<div class="legend-box">
+    <strong style="display:block; margin-bottom:8px; font-size:13px;">NDVI Index</strong>
+    <div style="display: flex; align-items: center; margin-bottom: 5px;">
+        <div style="width: 16px; height: 16px; background: #006400; margin-right: 8px; border-radius:3px;"></div>
+        <span>1.0 (Dense Forest)</span>
+    </div>
+    <div style="display: flex; align-items: center; margin-bottom: 5px;">
+        <div style="width: 16px; height: 16px; background: #9acd32; margin-right: 8px; border-radius:3px;"></div>
+        <span>0.5 (Grassland)</span>
+    </div>
+    <div style="display: flex; align-items: center; margin-bottom: 5px;">
+        <div style="width: 16px; height: 16px; background: #ffff00; margin-right: 8px; border-radius:3px;"></div>
+        <span>0.0 (Dry / Soil)</span>
+    </div>
+    <div style="display: flex; align-items: center;">
+        <div style="width: 16px; height: 16px; background: #d73027; margin-right: 8px; border-radius:3px;"></div>
+        <span>-1.0 (Water / City)</span>
+    </div>
+</div>
+
+<div class="style-switcher">
+    <button class="style-btn active" onclick="switchStyle('dark')" id="btn-dark">Dark</button>
+    <button class="style-btn" onclick="switchStyle('satellite')" id="btn-sat">Satellite</button>
+    <button class="style-btn" onclick="switchStyle('street')" id="btn-street">Plan</button>
+</div>
+
+<script>
+    mapboxgl.accessToken = "{{ mapbox_token }}"; 
+
+    // --- 0. STATE ---
+    let currentData = null; 
+    let currentBbox = null; 
+    let currentView = 'risk';
+    let timer;
+    let currentAbortController = null; 
+
+    // --- 1. WIND SYSTEM ---
+    class WindSystem {
+        constructor() {
+            this.canvas = document.getElementById('wind-canvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.particles = [];
+            this.numParticles = 250; 
+            this.width = window.innerWidth;
+            this.height = window.innerHeight;
+            this.active = false; // OFF BY DEFAULT
+            this.grid = null; 
+            this.bbox = null; 
+
+            this.canvas.width = this.width;
+            this.canvas.height = this.height;
+            window.addEventListener('resize', () => {
+                this.width = window.innerWidth;
+                this.height = window.innerHeight;
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+            });
+
+            for(let i=0; i<this.numParticles; i++) {
+                this.particles.push(this.createParticle());
+            }
+
+            this.animate();
+        }
+
+        createParticle() {
+            return {
+                x: Math.random() * this.width,
+                y: Math.random() * this.height,
+                age: Math.random() * 100,
+                maxAge: 80 + Math.random() * 100,
+                speedFactor: 0.5 + Math.random() * 0.5 
+            };
+        }
+
+        updateGrid(gridData, bbox) {
+            this.grid = gridData;
+            this.bbox = bbox; 
+        }
+
+        getVectorAt(x, y) {
+            if (!this.grid || !this.bbox) return { dx: 0, dy: 0 };
+
+            const u = x / this.width;
+            const v = y / this.height;
+            const west = this.bbox[0];
+            const east = this.bbox[2];
+            const south = this.bbox[1];
+            const north = this.bbox[3];
+
+            const pLon = west + u * (east - west);
+            const pLat = north - v * (north - south); 
+
+            let sumU = 0;
+            let vectorX = 0;
+            let vectorY = 0;
+            let sumWeight = 0;
+
+            for (let point of this.grid) {
+                const dLat = point.lat - pLat;
+                const dLon = point.lon - pLon;
+                const distSq = dLat*dLat + dLon*dLon;
+                const w = 1 / (distSq + 0.0000001); 
+
+                sumU += point.u * w;
+                // Convert Degree to Radians
+                const rad = (point.v * Math.PI) / 180;
+                vectorX += Math.sin(rad) * w;
+                vectorY += Math.cos(rad) * w;
+                sumWeight += w;
+            }
+
+            const finalSpeed = sumU / sumWeight;
+            const avgVecX = vectorX / sumWeight;
+            const avgVecY = vectorY / sumWeight;
+            // Reconstruct angle in degrees (0 = North, Clockwise)
+            const finalDeg = (Math.atan2(avgVecX, avgVecY) * 180 / Math.PI + 360) % 360;
+
+            // --- CORRECT PROJECTION LOGIC ---
+            // Meteo 0 deg = FROM North. Particle should go South.
+            // Meteo 90 deg = FROM East. Particle should go West.
+            // Mapbox/Canvas: X+ is Right (East), Y+ is Down (South).
+            
+            // To calculate DX, DY:
+            // DX = -sin(angle) * speed
+            // DY = cos(angle) * speed
+            // (The negative sign essentially reverses "FROM" to "TO")
+            
+            const angleRad = finalDeg * (Math.PI / 180);
+            
+            const pxSpeed = finalSpeed * 0.08; 
+
+            return {
+                dx: -Math.sin(angleRad) * pxSpeed,
+                dy: Math.cos(angleRad) * pxSpeed
+            };
+        }
+
+        animate() {
+            if (!this.active) {
+                this.ctx.clearRect(0, 0, this.width, this.height);
+                requestAnimationFrame(() => this.animate());
+                return;
+            }
+
+            this.ctx.globalCompositeOperation = "destination-in";
+            this.ctx.fillStyle = "rgba(0, 0, 0, 0.90)"; 
+            this.ctx.fillRect(0, 0, this.width, this.height);
+
+            this.ctx.globalCompositeOperation = "source-over";
+            this.ctx.fillStyle = "rgba(255, 255, 255, 0.5)"; 
+
+            this.particles.forEach(p => {
+                const vec = this.getVectorAt(p.x, p.y);
+                p.x += vec.dx * p.speedFactor;
+                p.y += vec.dy * p.speedFactor;
+                p.age++;
+
+                this.ctx.beginPath();
+                this.ctx.arc(p.x, p.y, 1.2, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                if (p.x < 0 || p.x > this.width || p.y < 0 || p.y > this.height || p.age > p.maxAge) {
+                    p.x = Math.random() * this.width;
+                    p.y = Math.random() * this.height;
+                    p.age = 0;
+                }
+            });
+            requestAnimationFrame(() => this.animate());
+        }
+
+        toggle(isActive) {
+            this.active = isActive;
+        }
+    }
+
+    const windSystem = new WindSystem();
+
+
+    // --- 2. INIT ---
+    document.addEventListener('DOMContentLoaded', () => {
+        const today = new Date();
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setDate(today.getDate() - 30);
+        const formatDate = (date) => date.toISOString().split('T')[0];
+
+        document.getElementById('date-end').value = formatDate(today);
+        document.getElementById('date-start').value = formatDate(oneMonthAgo);
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    map.flyTo({
+                        center: [position.coords.longitude, position.coords.latitude],
+                        zoom: 12, essential: true
+                    });
+                },
+                (error) => { console.warn("Geolocation denied:", error); }
+            );
+        }
+    });
+
+    const styles = {
+        'dark': 'mapbox://styles/mapbox/dark-v11',
+        'satellite': 'mapbox://styles/mapbox/satellite-streets-v12',
+        'street': 'mapbox://styles/mapbox/streets-v12'
+    };
+
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: styles['dark'], 
+        center: [-0.9, 44.6], 
+        zoom: 4, 
+        projection: 'globe'
+    });
+
+    map.on('style.load', () => {
+        map.setFog({}); 
+        if(currentData && currentBbox) updateMapOverlay(currentData, currentBbox);
+    });
+
+    // --- UI HANDLERS ---
+    document.getElementById('wind-toggle').addEventListener('change', (e) => windSystem.toggle(e.target.checked));
+
+    function switchStyle(styleKey) {
+        map.setStyle(styles[styleKey]);
+        document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('btn-' + styleKey).classList.add('active');
+    }
+
+    function toggleView(view) {
+        currentView = view;
+        document.querySelectorAll('.toggle-opt').forEach(el => el.classList.remove('selected'));
+        document.getElementById('view-' + view).classList.add('selected');
+        const legend = document.querySelector('.legend-box');
+        if (view === 'rgb') legend.style.display = 'none'; else legend.style.display = 'block';
+        if (currentData && currentBbox) updateMapOverlay(currentData, currentBbox);
+    }
+
+    document.getElementById('date-start').addEventListener('change', () => { if(map.getZoom() >= 10) runAnalysis(); });
+    document.getElementById('date-end').addEventListener('change', () => { if(map.getZoom() >= 10) runAnalysis(); });
+
+    // --- HELPER: STATUS UPDATE ---
+    function setStatus(state) {
+        const box = document.getElementById('status-indicator');
+        const text = document.getElementById('status-text');
+        
+        box.className = "status-box " + state; // status-idle, status-waiting, status-scanning
+        
+        if (state === 'status-idle') text.innerText = "Ready";
+        if (state === 'status-waiting') text.innerText = "Stabilizing...";
+        if (state === 'status-scanning') text.innerText = "Scanning Satellite...";
+    }
+
+    // --- ANALYSIS LOGIC ---
+    map.on('move', () => {
+        const zoom = map.getZoom();
+        if (zoom < 10) return;
+        // Immediate Feedback: User is moving map
+        setStatus('status-waiting');
+        clearTimeout(timer); // Reset the timer
+    });
+
+    map.on('moveend', () => {
+        const zoom = map.getZoom();
+
+        if (zoom < 10) {
+            if (currentAbortController) currentAbortController.abort();
+            setStatus('status-idle');
+            document.getElementById('zoom-warning').style.display = 'block';
+            return;
+        }
+        document.getElementById('zoom-warning').style.display = 'none';
+        
+        // Debounce actual call
+        clearTimeout(timer);
+        timer = setTimeout(runAnalysis, 600);
+    });
+
+    async function runAnalysis() {
+        if (currentAbortController) currentAbortController.abort();
+        currentAbortController = new AbortController();
+        const signal = currentAbortController.signal;
+
+        // Feedback: Request started
+        setStatus('status-scanning');
+
+        const bounds = map.getBounds();
+        const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+        const startDate = document.getElementById('date-start').value;
+        const endDate = document.getElementById('date-end').value;
+        const timestamp = new Date().getTime();
+
+        try {
+            const response = await fetch('/api/analyze?t=' + timestamp, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bbox: bbox, zoom: map.getZoom(), start_date: startDate, end_date: endDate }),
+                signal: signal 
+            });
+            
+            const data = await response.json();
+
+            if (data.status === 'success') {
+                currentData = data; 
+                currentBbox = bbox;
+                updateInterface(data);
+                updateMapOverlay(data, bbox);
+
+                if (data.weather.grid) {
+                    windSystem.updateGrid(data.weather.grid, bbox);
+                }
+            }
+            setStatus('status-idle'); // Done
+
+        } catch (e) {
+            if (e.name !== 'AbortError') {
+                console.error("API Error:", e);
+                setStatus('status-idle');
+            }
+        }
+    }
+
+    function removeOverlay() {
+        const sourceId = 'ndvi-overlay-source';
+        const layerId = 'ndvi-overlay-layer';
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+        if (map.getSource(sourceId)) map.removeSource(sourceId);
+    }
+
+    function updateMapOverlay(data, bbox) {
+        removeOverlay(); 
+        const base64Image = (currentView === 'rgb') ? data.image_rgb : data.image_ndvi;
+        if (!base64Image) return;
+
+        map.addSource('ndvi-overlay-source', {
+            'type': 'image',
+            'url': 'data:image/png;base64,' + base64Image,
+            'coordinates': [[bbox[0], bbox[3]], [bbox[2], bbox[3]], [bbox[2], bbox[1]], [bbox[0], bbox[1]]]
+        });
+        const opacity = (currentView === 'rgb') ? 1.0 : 0.75;
+        map.addLayer({
+            id: 'ndvi-overlay-layer',
+            'type': 'raster',
+            'source': 'ndvi-overlay-source',
+            'paint': { 'raster-opacity': opacity, 'raster-fade-duration': 200 }
+        });
+    }
+
+    function updateInterface(data) {
+        document.getElementById('temp').innerText = data.weather.temp.toFixed(1) + " °C";
+        document.getElementById('wind').innerText = data.weather.wind.toFixed(1) + " km/h";
+        document.getElementById('humidity').innerText = data.weather.humidity.toFixed(0) + " %";
+        document.getElementById('risk-val').innerText = data.risk_score;
+        let ndviText = "Medium";
+        if(data.risk_score < 30) ndviText = "Excellent"; else if(data.risk_score > 60) ndviText = "Critical";
+        document.getElementById('ndvi').innerText = ndviText;
+        const bar = document.getElementById('risk-fill');
+        bar.style.width = data.risk_score + "%";
+        if(data.risk_score > 70) bar.style.background = '#ff0000'; else if(data.risk_score > 40) bar.style.background = '#ffcc00'; else bar.style.background = '#00ff00';
+    }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    container_name: ignis-watch
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+    ports:
+      - "8000:8000"
