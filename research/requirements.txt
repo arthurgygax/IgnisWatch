@@ -1,0 +1,23 @@
+# Data Manipulation
+pandas
+numpy
+tqdm
+requests
+
+# Satellite & Geospatial
+pystac-client
+planetary-computer
+odc-stac
+rasterio
+rioxarray
+
+# AI & Machine Learning
+scikit-learn
+xgboost
+joblib
+
+# Visualization & Notebooks
+jupyter
+matplotlib
+seaborn
+Pillow
