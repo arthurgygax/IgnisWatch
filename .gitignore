@@ -18,3 +18,7 @@ Thumbs.db
 # Project specific
 .cache/
 data/
+
+# Ignore huge Data files
+research/nasa_data/
+research/nasa_data/*
